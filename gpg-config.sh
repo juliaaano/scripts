@@ -67,4 +67,6 @@ echo export GPG_TTY=$(tty)
 
 echo "# DO NOT forget to eval"
 echo "# eval \$(gpg-config)"
-
+echo "# eval \$(curl -s https://raw.githubusercontent.com/juliaaano/scripts/master/gpg-config.sh | bash)"
+echo "# Restart the gpg agent"
+echo "# eval \$(curl -s https://raw.githubusercontent.com/juliaaano/scripts/master/gpg-agent-setup.sh | bash)"
