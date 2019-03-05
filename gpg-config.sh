@@ -54,6 +54,8 @@ enable-ssh-support
 pinentry-program $PINENTRY
 default-cache-ttl 1200
 max-cache-ttl 7200
+default-cache-ttl-ssh 1200
+max-cache-ttl-ssh 7200
 EOF
 
 chmod 600 $GNUPGHOME/gpg-agent.conf
