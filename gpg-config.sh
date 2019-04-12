@@ -52,10 +52,10 @@ chmod 600 $GNUPGHOME/gpg.conf
 cat << EOF > $GNUPGHOME/gpg-agent.conf
 enable-ssh-support
 pinentry-program $PINENTRY
-default-cache-ttl 1200
-max-cache-ttl 7200
-default-cache-ttl-ssh 1200
-max-cache-ttl-ssh 7200
+default-cache-ttl 3600
+max-cache-ttl 14400
+default-cache-ttl-ssh 3600
+max-cache-ttl-ssh 14400
 EOF
 
 chmod 600 $GNUPGHOME/gpg-agent.conf
