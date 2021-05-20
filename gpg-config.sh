@@ -47,6 +47,10 @@ require-cross-certification
 use-agent
 EOF
 
+cat << EOF > $GNUPGHOME/scdaemon.conf
+disable-ccid
+EOF
+
 chmod 600 $GNUPGHOME/gpg.conf
 
 cat << EOF > $GNUPGHOME/gpg-agent.conf
