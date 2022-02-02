@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -euxo pipefail
+
+/usr/local/bin/blueutil --power 0
+
+echo "end of .sleep" > /dev/null
+
