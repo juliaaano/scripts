@@ -9,7 +9,7 @@ if [ -d $GNUPGHOME ]; then
     exit 1
 fi
 
-PINENTRY=$(which pinentry-mac || true)
+PINENTRY=$(which pinentry || true)
 
 if [ -z $PINENTRY ]; then
     echo "echo pinentry-mac not found"
@@ -56,10 +56,11 @@ chmod 600 $GNUPGHOME/gpg.conf
 cat << EOF > $GNUPGHOME/gpg-agent.conf
 enable-ssh-support
 pinentry-program $PINENTRY
-default-cache-ttl 21600
-max-cache-ttl 43200
-default-cache-ttl-ssh 21600
-max-cache-ttl-ssh 43200
+default-cache-ttl 0
+max-cache-ttl 0
+default-cache-ttl-ssh 0
+max-cache-ttl-ssh 0
+#cache settings have no effect as they are overwritten by yubikey
 EOF
 
 chmod 600 $GNUPGHOME/gpg-agent.conf
