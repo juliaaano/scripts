@@ -131,6 +131,24 @@ run_code "async (page) => {
   }
 }"
 
+# --- Step 5c: Disable auto-stop -----------------------------------------------
+
+echo "==> Disabling auto-stop ..."
+run_code "async (page) => {
+  const autoStopDate = page.locator('text=/hours from now/i').first();
+  await autoStopDate.waitFor({ timeout: 5000 });
+  await autoStopDate.click();
+  await page.waitForTimeout(2000);
+  const noAutoStop = page.locator('text=/No auto-stop/i');
+  await noAutoStop.waitFor({ timeout: 5000 });
+  await noAutoStop.click();
+  await page.waitForTimeout(500);
+  const confirm = page.getByRole('button', { name: 'Confirm' });
+  await confirm.click();
+  await page.waitForTimeout(1000);
+  console.log('Auto-stop disabled');
+}"
+
 # --- Step 6: Fill the order form ---------------------------------------------
 
 echo "==> Filling order form (activity=$ACTIVITY, purpose=$PURPOSE) ..."
