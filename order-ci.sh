@@ -115,6 +115,22 @@ run_code "async (page) => {
   await page.waitForTimeout(2000);
 }"
 
+# --- Step 5b: Optionally create users on cluster -----------------------------
+
+echo "==> Checking for 'Create users on cluster?' option ..."
+run_code "async (page) => {
+  const checkbox = page.getByRole('checkbox', { name: 'Create users on cluster?' });
+  if (await checkbox.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await checkbox.check();
+    await page.waitForTimeout(500);
+    const userCount = page.getByRole('spinbutton', { name: 'User Count' });
+    await userCount.fill('5');
+    console.log('Created users on cluster with count 5');
+  } else {
+    console.log('Create users on cluster option not found, skipping');
+  }
+}"
+
 # --- Step 6: Fill the order form ---------------------------------------------
 
 echo "==> Filling order form (activity=$ACTIVITY, purpose=$PURPOSE) ..."
