@@ -9,10 +9,10 @@ if [ -d $GNUPGHOME ]; then
     exit 1
 fi
 
-PINENTRY=$(which pinentry || true)
+PINENTRY=$(which pinentry-curses 2>/dev/null || which pinentry-tty 2>/dev/null || true)
 
 if [ -z $PINENTRY ]; then
-    echo "echo pinentry-mac not found"
+    echo "echo pinentry-curses or pinentry-tty not found"
     exit 1
 fi
 
