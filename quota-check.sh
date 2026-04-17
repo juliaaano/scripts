@@ -29,9 +29,10 @@ yaml_val() {
   echo "$YAML" | grep "^\s*$1:" | head -1 | sed 's/.*: *"\{0,1\}\([^"]*\)"\{0,1\}/\1/'
 }
 
-# Extract from hard: and used: sections separately
-HARD_SECTION=$(echo "$YAML" | sed -n '/^    hard:/,/^    used:/p')
-USED_SECTION=$(echo "$YAML" | sed -n '/^    used:/,/^  [^ ]/p')
+# Extract the total section first, then hard/used from within it
+TOTAL_SECTION=$(echo "$YAML" | sed -n '/^  total:/,/^  [^ ]/p')
+HARD_SECTION=$(echo "$TOTAL_SECTION" | sed -n '/^    hard:/,/^    used:/p')
+USED_SECTION=$(echo "$TOTAL_SECTION" | sed -n '/^    used:/,$p')
 
 yaml_hard() { echo "$HARD_SECTION" | grep "^\s*$1:" | head -1 | sed 's/.*: *"\{0,1\}\([^"]*\)"\{0,1\}/\1/'; }
 yaml_used() { echo "$USED_SECTION" | grep "^\s*$1:" | head -1 | sed 's/.*: *"\{0,1\}\([^"]*\)"\{0,1\}/\1/'; }
@@ -45,14 +46,29 @@ LIM_CPU_HARD=$(yaml_hard "limits.cpu")
 LIM_MEM_USED=$(yaml_used "limits.memory")
 LIM_MEM_HARD=$(yaml_hard "limits.memory")
 
-# Convert bytes to human-readable Gi (with ~ prefix)
-bytes_to_gi() {
-  local bytes=$1
-  if [[ "$bytes" =~ ^[0-9]+$ ]]; then
-    awk "BEGIN { printf \"~%.1f Gi\", $bytes / (1024*1024*1024) }"
+# Convert memory value to human-readable Gi (with ~ prefix)
+mem_to_gi() {
+  local val=$1
+  local bytes
+  if [[ "$val" =~ ^([0-9]+)k$ ]]; then
+    bytes=$(awk "BEGIN { printf \"%.0f\", ${BASH_REMATCH[1]} * 1000 }")
+  elif [[ "$val" =~ ^([0-9]+)Ki$ ]]; then
+    bytes=$(awk "BEGIN { printf \"%.0f\", ${BASH_REMATCH[1]} * 1024 }")
+  elif [[ "$val" =~ ^([0-9]+)M$ ]]; then
+    bytes=$(awk "BEGIN { printf \"%.0f\", ${BASH_REMATCH[1]} * 1000000 }")
+  elif [[ "$val" =~ ^([0-9]+)Mi$ ]]; then
+    bytes=$(awk "BEGIN { printf \"%.0f\", ${BASH_REMATCH[1]} * 1048576 }")
+  elif [[ "$val" =~ ^([0-9]+)G$ ]]; then
+    bytes=$(awk "BEGIN { printf \"%.0f\", ${BASH_REMATCH[1]} * 1000000000 }")
+  elif [[ "$val" =~ ^([0-9]+)Gi$ ]]; then
+    bytes=$(awk "BEGIN { printf \"%.0f\", ${BASH_REMATCH[1]} * 1073741824 }")
+  elif [[ "$val" =~ ^[0-9]+$ ]]; then
+    bytes=$val
   else
-    echo "$bytes"
+    echo "$val"
+    return
   fi
+  awk "BEGIN { printf \"~%.1f Gi\", $bytes / 1073741824 }"
 }
 
 # Format CPU with comma separators (e.g., 18935m -> 18,935m)
@@ -81,11 +97,11 @@ format_quota() {
 # Format values
 FMT_REQ_CPU_USED=$(format_cpu "$REQ_CPU_USED")
 FMT_REQ_CPU_HARD=$(format_quota "$REQ_CPU_HARD")
-FMT_REQ_MEM_USED=$(bytes_to_gi "$REQ_MEM_USED")
+FMT_REQ_MEM_USED=$(mem_to_gi "$REQ_MEM_USED")
 FMT_REQ_MEM_HARD=$(format_quota "$REQ_MEM_HARD")
 FMT_LIM_CPU_USED=$(format_cpu "$LIM_CPU_USED")
 FMT_LIM_CPU_HARD=$(format_quota "$LIM_CPU_HARD")
-FMT_LIM_MEM_USED=$(bytes_to_gi "$LIM_MEM_USED")
+FMT_LIM_MEM_USED=$(mem_to_gi "$LIM_MEM_USED")
 FMT_LIM_MEM_HARD=$(format_quota "$LIM_MEM_HARD")
 
 # Print table
