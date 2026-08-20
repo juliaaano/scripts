@@ -63,8 +63,44 @@ snapshot() {
   echo "Snapshot saved to: $SNAPSHOT_FILE"
 }
 
+fail() {
+  local step="$1"
+  local detail="${2:-}"
+  echo ""
+  printf '\033[1;31m'
+  cat <<'EOF'
+############################################################
+#                                                          #
+#                     !!  ERROR  !!                        #
+#                                                          #
+############################################################
+EOF
+  printf '\033[0m'
+  echo ""
+  echo "Step failed: $step"
+  if [[ -n "$detail" ]]; then
+    echo ""
+    echo "--- Details ------------------------------------------------"
+    echo "$detail"
+    echo "--------------------------------------------------------------"
+  fi
+  echo ""
+  exit 1
+}
+
+# playwright-cli's run-code always exits 0, even when the executed JS
+# throws — failures only surface as an "### Error" block in stdout. Check
+# for that explicitly so real errors stop the script instead of being
+# silently ignored.
 run_code() {
-  $CLI run-code "$1" $CLI_OPTS
+  local step_name="$1"
+  local code="$2"
+  local output
+  output=$($CLI run-code "$code" $CLI_OPTS 2>&1)
+  echo "$output"
+  if echo "$output" | grep -q '^### Error'; then
+    fail "$step_name" "$output"
+  fi
 }
 
 wait_for_user() {
@@ -79,6 +115,10 @@ wait_for_user() {
 echo "==> Opening browser (headless) at $BASE_URL ..."
 OPEN_OUTPUT=$($CLI open "$BASE_URL" $CLI_OPTS 2>&1) || true
 echo "$OPEN_OUTPUT"
+
+if echo "$OPEN_OUTPUT" | grep -q '^### Error'; then
+  fail "Open browser" "$OPEN_OUTPUT"
+fi
 
 # --- Step 2: Handle login if needed -------------------------------------------
 # Pop up a headed browser only for the login itself, then drop back to headless.
@@ -99,7 +139,7 @@ fi
 # --- Step 3: Search for the CI -----------------------------------------------
 
 echo "==> Searching for '$CI_NAME' ..."
-run_code "async (page) => {
+run_code "Search for CI" "async (page) => {
   await page.getByRole('textbox', { name: 'Search' }).fill('$CI_NAME');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(2000);
@@ -108,7 +148,7 @@ run_code "async (page) => {
 # --- Step 4: Select the correct environment result ---------------------------
 
 echo "==> Clicking first search result matching env '$ENV' ..."
-run_code "async (page) => {
+run_code "Select environment result" "async (page) => {
   const link = page.locator('a[href*=\"babylon-catalog-${ENV}\"]').first();
   await link.waitFor({ timeout: 5000 });
   await link.click();
@@ -118,7 +158,7 @@ run_code "async (page) => {
 # --- Step 5: Click Order button ----------------------------------------------
 
 echo "==> Clicking Order button ..."
-run_code "async (page) => {
+run_code "Click Order button" "async (page) => {
   const orderBtn = page.getByRole('button', { name: 'Order' });
   await orderBtn.waitFor({ timeout: 5000 });
   await orderBtn.click();
@@ -128,12 +168,12 @@ run_code "async (page) => {
 # --- Step 5b: Optionally create users on cluster -----------------------------
 
 echo "==> Checking for 'Create users on cluster?' option ..."
-run_code "async (page) => {
+run_code "Create users on cluster option" "async (page) => {
   const checkbox = page.getByRole('checkbox', { name: 'Create users on cluster?' });
   if (await checkbox.isVisible({ timeout: 2000 }).catch(() => false)) {
     await checkbox.check();
     await page.waitForTimeout(500);
-    const userCount = page.getByRole('spinbutton', { name: 'User Count' });
+    const userCount = page.getByRole('spinbutton', { name: 'Input' });
     await userCount.fill('5');
     console.log('Created users on cluster with count 5');
   } else {
@@ -144,7 +184,7 @@ run_code "async (page) => {
 # --- Step 5c: Disable auto-stop -----------------------------------------------
 
 echo "==> Disabling auto-stop ..."
-run_code "async (page) => {
+run_code "Disable auto-stop" "async (page) => {
   const autoStopDate = page.locator('text=/hours from now/i').first();
   await autoStopDate.waitFor({ timeout: 5000 });
   await autoStopDate.click();
@@ -162,7 +202,7 @@ run_code "async (page) => {
 # --- Step 6: Fill the order form ---------------------------------------------
 
 echo "==> Filling order form (activity=$ACTIVITY, purpose=$PURPOSE) ..."
-run_code "async (page) => {
+run_code "Fill order form" "async (page) => {
   await page.getByRole('radio', { name: '$ACTIVITY' }).click();
   await page.getByRole('button', { name: '- Select purpose -' }).click();
   await page.getByRole('option', { name: '$PURPOSE' }).click();
@@ -173,7 +213,7 @@ run_code "async (page) => {
 # --- Step 7: Submit the order ------------------------------------------------
 
 echo "==> Submitting order..."
-run_code "async (page) => {
+run_code "Submit order" "async (page) => {
   await page.getByRole('button', { name: 'Order' }).click();
   await page.waitForTimeout(3000);
 }"
