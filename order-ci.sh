@@ -15,9 +15,10 @@ set -euo pipefail
 #
 # Requirements: playwright-cli (npm install -g @playwright/cli@latest)
 #
-# The browser opens in headed + persistent mode so login state is reused
-# across sessions. If a login page is detected, the script pauses for you
-# to authenticate manually.
+# The browser runs headless by default, reusing a persistent profile so
+# login state carries over between runs. If a login page is detected, the
+# script pops up a headed browser just long enough for you to complete SSO,
+# then closes it and resumes headless for the rest of the order.
 ###############################################################################
 
 # --- Arguments ---------------------------------------------------------------
@@ -48,7 +49,8 @@ fi
 # --- Helpers -----------------------------------------------------------------
 
 CLI="playwright-cli"
-CLI_OPTS="--headed --browser=chrome --persistent"
+CLI_OPTS="--browser=chrome --persistent"
+HEADED_OPTS="$CLI_OPTS --headed"
 SNAPSHOT_FILE=""
 
 snapshot() {
@@ -72,16 +74,24 @@ wait_for_user() {
   read -r
 }
 
-# --- Step 1: Open browser and navigate --------------------------------------
+# --- Step 1: Open browser (headless) and navigate ----------------------------
 
-echo "==> Opening browser at $BASE_URL ..."
+echo "==> Opening browser (headless) at $BASE_URL ..."
 OPEN_OUTPUT=$($CLI open "$BASE_URL" $CLI_OPTS 2>&1) || true
 echo "$OPEN_OUTPUT"
 
-# --- Step 2: Handle login if needed ------------------------------------------
+# --- Step 2: Handle login if needed -------------------------------------------
+# Pop up a headed browser only for the login itself, then drop back to headless.
 
 if echo "$OPEN_OUTPUT" | grep -qiE 'log.in|sign.in|username|password|sso'; then
+  echo "==> Login required. Reopening browser in headed mode for SSO..."
+  $CLI close >/dev/null 2>&1 || true
+  $CLI open "$BASE_URL" $HEADED_OPTS >/dev/null 2>&1 || true
   wait_for_user "Login page detected. Please log in manually in the browser window."
+  echo "==> Login complete. Closing headed browser and resuming headless..."
+  $CLI close >/dev/null 2>&1 || true
+  OPEN_OUTPUT=$($CLI open "$BASE_URL" $CLI_OPTS 2>&1) || true
+  echo "$OPEN_OUTPUT"
   echo "==> Verifying catalog page loaded..."
   snapshot || true
 fi
@@ -176,5 +186,5 @@ echo "============================================"
 echo "  Order submitted!"
 echo "  URL: $RESULT_URL"
 echo "============================================"
-echo ""
-echo "Browser left open for review. Close it manually when done."
+
+$CLI close >/dev/null 2>&1 || true
