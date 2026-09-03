@@ -15,10 +15,11 @@ set -euo pipefail
 #
 # Requirements: playwright-cli (npm install -g @playwright/cli@latest)
 #
-# The browser runs headless by default, reusing a persistent profile so
-# login state carries over between runs. If a login page is detected, the
-# script pops up a headed browser just long enough for you to complete SSO,
-# then closes it and resumes headless for the rest of the order.
+# The browser runs headless by default, reusing a dedicated persistent profile
+# so login state carries over between runs without colliding with other
+# playwright-cli sessions. If a login page is detected, the script pops up a
+# headed browser just long enough for you to complete SSO, then closes it and
+# resumes headless for the rest of the order.
 ###############################################################################
 
 # --- Arguments ---------------------------------------------------------------
@@ -48,19 +49,19 @@ fi
 
 # --- Helpers -----------------------------------------------------------------
 
-CLI="playwright-cli"
-CLI_OPTS="--browser=chrome --persistent"
-HEADED_OPTS="$CLI_OPTS --headed"
-SNAPSHOT_FILE=""
-
+CLI=(playwright-cli -s=order-ci)
+PROFILE_DIR="${ORDER_CI_PROFILE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/order-ci-playwright}"
+CLI_OPTS=(--browser=chrome --persistent --profile "$PROFILE_DIR")
+HEADED_OPTS=("${CLI_OPTS[@]}" --headed)
 snapshot() {
-  SNAPSHOT_FILE=$($CLI snapshot $CLI_OPTS 2>/dev/null | grep -oE '/[^ ]+\.md' | head -1)
-  if [[ -z "$SNAPSHOT_FILE" ]]; then
-    # Fallback: capture output directly
-    $CLI snapshot $CLI_OPTS
+  # Browser-launch options are accepted by `open` only.  Once open, the CLI
+  # retains that session, and `snapshot` operates on it without those options.
+  local output
+  output=$("${CLI[@]}" snapshot 2>&1) || true
+  echo "$output"
+  if echo "$output" | grep -qE '^### Error|^Error:|Unknown options:'; then
     return 1
   fi
-  echo "Snapshot saved to: $SNAPSHOT_FILE"
 }
 
 fail() {
@@ -96,9 +97,9 @@ run_code() {
   local step_name="$1"
   local code="$2"
   local output
-  output=$($CLI run-code "$code" $CLI_OPTS 2>&1)
+  output=$("${CLI[@]}" run-code "$code" 2>&1) || true
   echo "$output"
-  if echo "$output" | grep -q '^### Error'; then
+  if echo "$output" | grep -qE '^### Error|^Error:|Unknown options:'; then
     fail "$step_name" "$output"
   fi
 }
@@ -113,10 +114,10 @@ wait_for_user() {
 # --- Step 1: Open browser (headless) and navigate ----------------------------
 
 echo "==> Opening browser (headless) at $BASE_URL ..."
-OPEN_OUTPUT=$($CLI open "$BASE_URL" $CLI_OPTS 2>&1) || true
+OPEN_OUTPUT=$("${CLI[@]}" open "$BASE_URL" "${CLI_OPTS[@]}" 2>&1) || true
 echo "$OPEN_OUTPUT"
 
-if echo "$OPEN_OUTPUT" | grep -q '^### Error'; then
+if echo "$OPEN_OUTPUT" | grep -qE '^### Error|^Error:|Unknown options:'; then
   fail "Open browser" "$OPEN_OUTPUT"
 fi
 
@@ -125,13 +126,20 @@ fi
 
 if echo "$OPEN_OUTPUT" | grep -qiE 'log.in|sign.in|username|password|sso'; then
   echo "==> Login required. Reopening browser in headed mode for SSO..."
-  $CLI close >/dev/null 2>&1 || true
-  $CLI open "$BASE_URL" $HEADED_OPTS >/dev/null 2>&1 || true
+  "${CLI[@]}" close >/dev/null 2>&1 || true
+  HEADED_OUTPUT=$("${CLI[@]}" open "$BASE_URL" "${HEADED_OPTS[@]}" 2>&1) || true
+  echo "$HEADED_OUTPUT"
+  if echo "$HEADED_OUTPUT" | grep -qE '^### Error|^Error:|Unknown options:'; then
+    fail "Open headed browser for login" "$HEADED_OUTPUT"
+  fi
   wait_for_user "Login page detected. Please log in manually in the browser window."
   echo "==> Login complete. Closing headed browser and resuming headless..."
-  $CLI close >/dev/null 2>&1 || true
-  OPEN_OUTPUT=$($CLI open "$BASE_URL" $CLI_OPTS 2>&1) || true
+  "${CLI[@]}" close >/dev/null 2>&1 || true
+  OPEN_OUTPUT=$("${CLI[@]}" open "$BASE_URL" "${CLI_OPTS[@]}" 2>&1) || true
   echo "$OPEN_OUTPUT"
+  if echo "$OPEN_OUTPUT" | grep -qE '^### Error|^Error:|Unknown options:'; then
+    fail "Resume browser after login" "$OPEN_OUTPUT"
+  fi
   echo "==> Verifying catalog page loaded..."
   snapshot || true
 fi
@@ -220,11 +228,11 @@ run_code "Submit order" "async (page) => {
 
 # --- Step 9: Report result ---------------------------------------------------
 
-RESULT_URL=$($CLI eval "window.location.href" $CLI_OPTS 2>&1) || true
+RESULT_URL=$("${CLI[@]}" eval "() => window.location.href" 2>&1) || true
 echo ""
 echo "============================================"
 echo "  Order submitted!"
 echo "  URL: $RESULT_URL"
 echo "============================================"
 
-$CLI close >/dev/null 2>&1 || true
+"${CLI[@]}" close >/dev/null 2>&1 || true
